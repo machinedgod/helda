@@ -5,7 +5,9 @@ module TileMap
 , Height
 , TileMap(..)
 , loadFromFile
+
 , linear2Coord
+, coord2Linear
 ) where
 
 
@@ -35,10 +37,15 @@ loadFromFile f ef = liftIO (stringToMap <$> readFile f)
         stringToMap = let w = fromIntegral . length . takeWhile (/=('\n'))
                           h = fromIntegral . (+1) . length . filter (==('\n'))
                           d = V.fromList .  fmap ef . filter (/=('\n'))
-                      in  TileMap <*> w <*> h <*> d
+                      in  TileMap f <$> w <*> h <*> d
 
 
 linear2Coord ∷ Word → Width → V2 Word
 linear2Coord i w = let x = i `mod` w
                        y = i `div` w
                    in  V2 x y
+
+
+coord2Linear ∷ V2 Int → Width → Word
+coord2Linear (V2 x y) w = fromIntegral (max 0 (y * (fromIntegral w) + x))
+

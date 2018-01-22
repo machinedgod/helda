@@ -5,12 +5,14 @@ module Main where
 
 import Prelude hiding (map)
 
+import Control.Monad          (when, void)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad          (when)
+import Data.Bool              (bool)
+import Data.Maybe             (fromMaybe)
 
 import Linear                 (V2(V2))
 
-import qualified Data.Vector as V (zip, toList)
+import qualified Data.Vector as V (toList, (!?))
 import qualified UI.NCurses  as C
 
 import Input
@@ -18,14 +20,60 @@ import TileMap
 
 -------------------------------------------------------------------------------
 
+type Opened = Bool
+
+data Tile a = Floor a
+            | Wall  a
+            | Door  Opened a
+            deriving (Show)
+
+
+drawableFromTile ∷ Tile a → a
+drawableFromTile (Floor  x) = x
+drawableFromTile (Wall   x) = x
+drawableFromTile (Door _ x) = x
+
+
+tileFromCharacter ∷ Char → Tile Char
+tileFromCharacter c@('╔') = Wall c
+tileFromCharacter c@('╗') = Wall c
+tileFromCharacter c@('╚') = Wall c
+tileFromCharacter c@('╝') = Wall c
+tileFromCharacter c@('═') = Wall c
+tileFromCharacter c@('║') = Wall c
+tileFromCharacter c@('╟') = Wall c
+tileFromCharacter c@('╤') = Wall c
+tileFromCharacter c@('╢') = Wall c
+tileFromCharacter c@('╧') = Wall c
+
+tileFromCharacter c@('│') = Wall c
+tileFromCharacter c@('─') = Wall c
+tileFromCharacter c@('┘') = Wall c
+tileFromCharacter c@('└') = Wall c
+tileFromCharacter c@('┌') = Wall c
+tileFromCharacter c@('┐') = Wall c
+tileFromCharacter c@('├') = Wall c
+tileFromCharacter c@('┤') = Wall c
+tileFromCharacter c@('┴') = Wall c
+tileFromCharacter c@('┬') = Wall c
+
+tileFromCharacter c@('.') = Floor c
+
+tileFromCharacter c@('+')  = Door False c
+tileFromCharacter c@('\'') = Door True  c
+
+tileFromCharacter _ = Wall '?'
+
+-------------------------------------------------------------------------------
+
 main ∷ IO ()
 main = C.runCurses $ do
-    C.setCursorMode C.CursorInvisible
+    void $ C.setCursorMode C.CursorInvisible
     C.setEcho       False
-    m ← liftIO $ loadFromFile "res/test_map.tmap" id
+    m ← liftIO $ loadFromFile "res/test_map.tmap" tileFromCharacter
     gameLoop (initialGame m)
     where
-        initialGame m = Game True (Entity (V2 0 0) Character) [] [] m
+        initialGame m = Game True (Entity (V2 0 0) "John") [] [] m
         gameLoop g = do
             e ← nextEvent
             let ng = update e g
@@ -35,7 +83,7 @@ main = C.runCurses $ do
 
 --------------------------------------------------------------------------------
 
-render ∷ Game a b c Char → C.Curses ()
+render ∷ Game a b c (Tile Char) → C.Curses ()
 render g = C.defaultWindow >>= (`C.updateWindow` renderAction) >> C.render
     where
         renderAction = do
@@ -44,13 +92,13 @@ render g = C.defaultWindow >>= (`C.updateWindow` renderAction) >> C.render
             drawCharacter (position . avatar $ g)
 
 
-drawMap ∷ TileMap Char → C.Update ()
-drawMap map = mapM_ drawTile . zip [0..] . V.toList . mapData $ map
+drawMap ∷ TileMap (Tile Char) → C.Update ()
+drawMap m = mapM_ drawTile . zip [0..] . V.toList . mapData $ m
     where
         drawTile (i, t) = do
-            let (V2 x y) = linear2Coord i (width map)
+            let (V2 x y) = linear2Coord i (width m)
             C.moveCursor (fromIntegral y) (fromIntegral x) 
-            C.drawGlyph (C.Glyph t [])
+            C.drawGlyph (C.Glyph (drawableFromTile t) [])
 
 
 drawCharacter ∷ V2 Int → C.Update ()
@@ -71,10 +119,6 @@ data Entity a = Entity {
 
 --------------------------------------------------------------------------------
 
-data Character = Character deriving(Show)
-data Item      = Item      deriving(Show)
-
-
 data Game a b c d = Game {
       running ∷ Bool
 
@@ -86,7 +130,7 @@ data Game a b c d = Game {
     }
 
 
-update ∷ Event → Game Character Item Character d → Game Character Item Character d
+update ∷ Event → Game a b c (Tile d) → Game a b c (Tile d)
 update (Move d) og = moveAvatar d og
 update Attack   og = og
 update Open     og = og
@@ -94,14 +138,21 @@ update Close    og = og
 update Get      og = og
 update Talk     og = og
 update Idle     og = og
-
 update Quit     og = og { running = False }
 
 
-moveAvatar ∷ Direction → Game Character a b c → Game Character a b c
-moveAvatar d og = let olda = avatar og
-                      np   = fmap (max 0) $ position olda + directionToVector d
-                  in  og { avatar = Entity np (object olda) }
+-- Do change only the entity, not the game, like this:
+-- moveAvatar ∷ Direction → TileMap (Tile a) → Entity a → Entity a
+moveAvatar ∷ Direction → Game a b c (Tile d) → Game a b c (Tile d)
+moveAvatar d og = let op  = position . avatar $ og
+                      np  = fmap (max 0) $ op + directionToVector d
+                      nap = fromMaybe op $ do
+                                mapTile ← (mapData . map $ og) V.!? fromIntegral (coord2Linear np (width . map $ og))
+                                case mapTile of
+                                    (Floor _)   → pure np
+                                    (Wall  _)   → pure op
+                                    (Door  t _) → pure $ bool op np t
+                  in  og { avatar = Entity nap (object . avatar $ og) }
 
 
 directionToVector ∷ Direction → V2 Int
