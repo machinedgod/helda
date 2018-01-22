@@ -3,3 +3,5 @@ TAGS
 cabal.sandbox.config
 dist/
 tags
+*.swp
+*.swo

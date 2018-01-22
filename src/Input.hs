@@ -18,6 +18,10 @@ data Direction = North
                | South
                | East
                | West
+               | NorthWest
+               | NorthEast
+               | SouthWest
+               | SouthEast
                deriving (Show)
 
 
@@ -43,6 +47,10 @@ nextEvent = let mif = fmap (cursesEvent2GameEvent . fromJust) . (`C.getEvent` No
         cursesEvent2GameEvent (C.EventCharacter 'j') = Just $ Move South
         cursesEvent2GameEvent (C.EventCharacter 'l') = Just $ Move East
         cursesEvent2GameEvent (C.EventCharacter 'h') = Just $ Move West
+        cursesEvent2GameEvent (C.EventCharacter 'y') = Just $ Move NorthWest
+        cursesEvent2GameEvent (C.EventCharacter 'u') = Just $ Move NorthEast
+        cursesEvent2GameEvent (C.EventCharacter 'b') = Just $ Move SouthWest
+        cursesEvent2GameEvent (C.EventCharacter 'n') = Just $ Move SouthEast
         cursesEvent2GameEvent (C.EventCharacter 'f') = Just $ Attack
         cursesEvent2GameEvent (C.EventCharacter 'o') = Just $ Open
         cursesEvent2GameEvent (C.EventCharacter 'c') = Just $ Close
