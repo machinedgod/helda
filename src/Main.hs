@@ -15,6 +15,7 @@ import Linear                 (V2(V2))
 import qualified Data.Vector as V (toList, (!?))
 import qualified UI.NCurses  as C
 
+import qualified MapGenerator as MG
 import Input
 import TileMap
 
@@ -25,6 +26,9 @@ type Opened = Bool
 data Tile a = Floor a
             | Wall  a
             | Door  Opened a
+
+            | Grass a
+            | Rock  a
             deriving (Show)
 
 
@@ -32,6 +36,8 @@ drawableFromTile ∷ Tile a → a
 drawableFromTile (Floor  x) = x
 drawableFromTile (Wall   x) = x
 drawableFromTile (Door _ x) = x
+drawableFromTile (Grass  x) = x
+drawableFromTile (Rock   x) = x
 
 
 tileFromCharacter ∷ Char → Tile Char
@@ -57,10 +63,15 @@ tileFromCharacter c@('┤') = Wall c
 tileFromCharacter c@('┴') = Wall c
 tileFromCharacter c@('┬') = Wall c
 
-tileFromCharacter c@('.') = Floor c
 
-tileFromCharacter c@('+')  = Door False c
-tileFromCharacter c@('\'') = Door True  c
+tileFromCharacter c@('+') = Door False c
+tileFromCharacter c@('/') = Door True  c
+
+tileFromCharacter c@(',')  = Grass c
+tileFromCharacter c@('\'') = Grass c
+tileFromCharacter c@('"')  = Grass c
+
+tileFromCharacter c@('.')  = Rock c
 
 tileFromCharacter _ = Wall '?'
 
@@ -70,7 +81,9 @@ main ∷ IO ()
 main = C.runCurses $ do
     void $ C.setCursorMode C.CursorInvisible
     C.setEcho       False
-    m ← liftIO $ loadFromFile "res/test_map.tmap" tileFromCharacter
+    --(w, h) ← bimap (fromIntegral . (1`subtract`)) (fromIntegral . (1`subtract`)) <$> C.screenSize
+    m ← liftIO $ MG.generate 30 30 tileFromCharacter
+    --m ← liftIO $ loadFromFile "res/test_map.tmap" tileFromCharacter
     gameLoop (initialGame m)
     where
         initialGame m = Game True (Entity (V2 0 0) "John") [] [] m
@@ -149,9 +162,9 @@ moveAvatar d og = let op  = position . avatar $ og
                       nap = fromMaybe op $ do
                                 mapTile ← (mapData . map $ og) V.!? fromIntegral (coord2Linear np (width . map $ og))
                                 case mapTile of
-                                    (Floor _)   → pure np
                                     (Wall  _)   → pure op
                                     (Door  t _) → pure $ bool op np t
+                                    _           → pure np
                   in  og { avatar = Entity nap (object . avatar $ og) }
 
 
