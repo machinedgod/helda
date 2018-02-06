@@ -9,6 +9,7 @@ import Control.Monad          (when, void)
 import Control.Monad.IO.Class (liftIO)
 import Data.Bool              (bool)
 import Data.Maybe             (fromMaybe)
+import Data.Bifunctor         (bimap)
 
 import Linear                 (V2(V2))
 
@@ -21,7 +22,21 @@ import TileMap
 
 -------------------------------------------------------------------------------
 
+data Palette = Palette {
+      black   ∷ C.ColorID
+    , red	  ∷ C.ColorID
+    , green	  ∷ C.ColorID
+    , yellow  ∷ C.ColorID
+    , blue	  ∷ C.ColorID
+    , magenta ∷ C.ColorID    
+    , cyan	  ∷ C.ColorID
+    , white   ∷ C.ColorID
+    }
+
+-------------------------------------------------------------------------------
+
 type Opened = Bool
+type CursesDrawable = (Char, [C.Attribute])
 
 data Tile a = Floor a
             | Wall  a
@@ -40,50 +55,50 @@ drawableFromTile (Grass  x) = x
 drawableFromTile (Rock   x) = x
 
 
-tileFromCharacter ∷ Char → Tile Char
-tileFromCharacter c@('╔') = Wall c
-tileFromCharacter c@('╗') = Wall c
-tileFromCharacter c@('╚') = Wall c
-tileFromCharacter c@('╝') = Wall c
-tileFromCharacter c@('═') = Wall c
-tileFromCharacter c@('║') = Wall c
-tileFromCharacter c@('╟') = Wall c
-tileFromCharacter c@('╤') = Wall c
-tileFromCharacter c@('╢') = Wall c
-tileFromCharacter c@('╧') = Wall c
+tileFromCharacter ∷ Palette → Char → Tile CursesDrawable
+tileFromCharacter p c@('╔') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('╗') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('╚') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('╝') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('═') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('║') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('╟') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('╤') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('╢') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('╧') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
 
-tileFromCharacter c@('│') = Wall c
-tileFromCharacter c@('─') = Wall c
-tileFromCharacter c@('┘') = Wall c
-tileFromCharacter c@('└') = Wall c
-tileFromCharacter c@('┌') = Wall c
-tileFromCharacter c@('┐') = Wall c
-tileFromCharacter c@('├') = Wall c
-tileFromCharacter c@('┤') = Wall c
-tileFromCharacter c@('┴') = Wall c
-tileFromCharacter c@('┬') = Wall c
+tileFromCharacter p c@('│') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('─') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('┘') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('└') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('┌') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('┐') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('├') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('┤') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('┴') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('┬') = Wall (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
 
+tileFromCharacter p c@('+') = Door False (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
+tileFromCharacter p c@('/') = Door True  (c, [ C.AttributeColor (yellow p), C.AttributeDim ])
 
-tileFromCharacter c@('+') = Door False c
-tileFromCharacter c@('/') = Door True  c
+tileFromCharacter p c@(',')  = Grass (c, [ C.AttributeColor (green p) ])
+tileFromCharacter p c@('\'') = Grass (c, [ C.AttributeColor (green p) ])
+tileFromCharacter p c@('"')  = Grass (c, [ C.AttributeColor (green p) ])
 
-tileFromCharacter c@(',')  = Grass c
-tileFromCharacter c@('\'') = Grass c
-tileFromCharacter c@('"')  = Grass c
+tileFromCharacter p c@('.')  = Rock (c, [ C.AttributeColor (white p), C.AttributeDim ])
 
-tileFromCharacter c@('.')  = Rock c
-
-tileFromCharacter _ = Wall '?'
+tileFromCharacter p _ = Wall ('?', [ C.AttributeColor (red p), C.AttributeBold ]) -- TODO crash
 
 -------------------------------------------------------------------------------
 
 main ∷ IO ()
 main = C.runCurses $ do
     void $ C.setCursorMode C.CursorInvisible
-    C.setEcho       False
-    --(w, h) ← bimap (fromIntegral . (1`subtract`)) (fromIntegral . (1`subtract`)) <$> C.screenSize
-    m ← liftIO $ MG.generate 30 30 tileFromCharacter
-    --m ← liftIO $ loadFromFile "res/test_map.tmap" tileFromCharacter
+    C.setEcho False
+    (r, c) ← bimap fromIntegral (fromIntegral . (1`subtract`)) <$> C.screenSize
+    p ← preparePalette
+    m ← liftIO $ MG.generate c r (tileFromCharacter p)
+
     gameLoop (initialGame m)
     where
         initialGame m = Game True (Entity (V2 0 0) "John") [] [] m
@@ -93,25 +108,68 @@ main = C.runCurses $ do
             render ng
             when (running ng) $
                 gameLoop ng
+        preparePalette = pure Palette
+                         <*> C.newColorID C.ColorBlack   C.ColorBlack 1
+                         <*> C.newColorID C.ColorRed     C.ColorBlack 2
+                         <*> C.newColorID C.ColorGreen   C.ColorBlack 3
+                         <*> C.newColorID C.ColorYellow  C.ColorBlack 4
+                         <*> C.newColorID C.ColorBlue    C.ColorBlack 5
+                         <*> C.newColorID C.ColorMagenta C.ColorBlack 6
+                         <*> C.newColorID C.ColorCyan    C.ColorBlack 7
+                         <*> C.newColorID C.ColorWhite   C.ColorBlack 8
 
 --------------------------------------------------------------------------------
 
-render ∷ Game a b c (Tile Char) → C.Curses ()
-render g = C.defaultWindow >>= (`C.updateWindow` renderAction) >> C.render
+render ∷ Game a b c (Tile CursesDrawable) → C.Curses ()
+render g = do
+    w ← C.defaultWindow
+    C.updateWindow w renderAction
+    C.render
     where
         renderAction = do
             C.clear
             drawMap (map g)
             drawCharacter (position . avatar $ g)
 
+{-
+ColorBlack
 
-drawMap ∷ TileMap (Tile Char) → C.Update ()
+ColorRed	 
+ColorGreen	 
+ColorYellow	 
+ColorBlue	 
+ColorMagenta	 
+ColorCyan	 
+ColorWhite
+-}
+
+{-
+AttributeColor ColorID	
+AttributeBold	
+AttributeDim	
+
+AttributeStandout	
+AttributeUnderline	
+AttributeReverse	
+AttributeBlink	
+AttributeAltCharset	
+AttributeInvisible	
+AttributeProtect	
+AttributeHorizontal	
+AttributeLeft	
+AttributeLow	
+AttributeRight	
+AttributeTop	
+AttributeVertical	
+-}
+
+drawMap ∷ TileMap (Tile CursesDrawable) → C.Update ()
 drawMap m = mapM_ drawTile . zip [0..] . V.toList . mapData $ m
     where
         drawTile (i, t) = do
             let (V2 x y) = linear2Coord i (width m)
             C.moveCursor (fromIntegral y) (fromIntegral x) 
-            C.drawGlyph (C.Glyph (drawableFromTile t) [])
+            C.drawGlyph (uncurry C.Glyph (drawableFromTile t))
 
 
 drawCharacter ∷ V2 Int → C.Update ()

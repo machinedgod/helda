@@ -18,6 +18,6 @@ newtype PDF a = PDF { unwrapPDF ∷ [(Float, a)] }
 createPDF ∷ (Ord a) ⇒ [(Float, a)] → PDF a
 createPDF l  = PDF $ sortBy probabilityOrder $ fmap (first normalize) l
     where
-        normalize v = v / fromIntegral (length l)
+        normalize v = v / (sum $ fmap fst l)
         probabilityOrder t1 t2 = fst t1 `compare` fst t2
 

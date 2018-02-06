@@ -30,16 +30,16 @@ uniformDistribution = createPDF $ (1.0,) <$> (grassTiles <> rockTiles)
 
 
 testDistribution ∷ PDF Char
-testDistribution = createPDF $ [ (1.0, ',')
-                               , (0.8, '\'')
-                               , (1.0, '"')
+testDistribution = createPDF $ [ (0.6, ',')
+                               , (0.6, '\'')
+                               , (0.6, '"')
                                , (0.3, '.')
                                ]
 
 
 generate ∷ (MonadRandom m) ⇒ Width → Height → (Char → a) → m (TileMap a)
 generate w h f = do
-    gd ← traverse (const (pickCharacter testDistribution))  [0..w * h]
+    gd ← traverse (const (pickCharacter testDistribution))  [0..w * h - 1]
     let d = fmap f gd
     pure $ TileMap "generated" w h (V.fromList d)
     where
