@@ -8,7 +8,6 @@ module Input
 ) where
 
 import Data.Maybe (fromJust)
-import Data.Bool  (bool)
 
 import qualified UI.NCurses as C
 
@@ -51,12 +50,12 @@ nextEvent = let mif = fmap (cursesEvent2GameEvent . fromJust) . (`C.getEvent` No
         cursesEvent2GameEvent (C.EventCharacter 'u') = Just $ Move NorthEast
         cursesEvent2GameEvent (C.EventCharacter 'b') = Just $ Move SouthWest
         cursesEvent2GameEvent (C.EventCharacter 'n') = Just $ Move SouthEast
-        cursesEvent2GameEvent (C.EventCharacter 'f') = Just $ Attack
-        cursesEvent2GameEvent (C.EventCharacter 'o') = Just $ Open
-        cursesEvent2GameEvent (C.EventCharacter 'c') = Just $ Close
-        cursesEvent2GameEvent (C.EventCharacter 'g') = Just $ Get
-        cursesEvent2GameEvent (C.EventCharacter 't') = Just $ Talk
-        cursesEvent2GameEvent (C.EventCharacter '.') = Just $ Idle
+        cursesEvent2GameEvent (C.EventCharacter 'f') = Just   Attack
+        cursesEvent2GameEvent (C.EventCharacter 'o') = Just   Open
+        cursesEvent2GameEvent (C.EventCharacter 'c') = Just   Close
+        cursesEvent2GameEvent (C.EventCharacter 'g') = Just   Get
+        cursesEvent2GameEvent (C.EventCharacter 't') = Just   Talk
+        cursesEvent2GameEvent (C.EventCharacter '.') = Just   Idle
 
-        cursesEvent2GameEvent (C.EventCharacter 'q') = Just $ Quit
+        cursesEvent2GameEvent (C.EventCharacter 'q') = Just   Quit
         cursesEvent2GameEvent _                      = Nothing
