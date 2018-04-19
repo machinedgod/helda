@@ -1,10 +1,13 @@
 {-# LANGUAGE UnicodeSyntax, DeriveFunctor, NegativeLiterals #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Main where
 
 
 import Prelude hiding (map)
 
+import Control.Lens           (makeLenses, (<>~), (%~), (.~), (^.), view, views,
+                               set)
 import Control.Monad          (when, void)
 import Control.Monad.IO.Class (liftIO)
 import Data.Bool              (bool)
@@ -94,81 +97,85 @@ tileFromCharacter p _ = Wall ('?', [ C.AttributeColor (red p), C.AttributeBold ]
 -------------------------------------------------------------------------------
 
 data Character a = Character {
-      charName  ∷ String
-    , inventory ∷ [a]
+      _charName  ∷ String
+    , _inventory ∷ [a]
     }
     deriving (Show)
+makeLenses ''Character
 
 
 addToInventory ∷ a → Character a → Character a
-addToInventory i c = c { inventory = inventory c ++ [i] }
+addToInventory i = inventory <>~ [i]
 
 
 removeFromInventory ∷ (Eq a) ⇒ a → Character a → Character a
-removeFromInventory i c = c { inventory = delete i (inventory c) }
+removeFromInventory i = inventory %~ delete i
 
 -------------------------------------------------------------------------------
 
 data Entity a = Entity {
-      position ∷ V2 Int   -- <-- Do we want negative positions?
-    , object   ∷ a
+      _position ∷ V2 Int   -- <-- Do we want negative positions?
+    , _object   ∷ a
     }
     deriving (Eq, Show, Functor)
+makeLenses ''Entity
 
 --------------------------------------------------------------------------------
 
 data Game a b c d = Game {
-      running ∷ Bool
+      _running ∷ Bool
 
-    , avatar  ∷ Entity a
-    , items   ∷ [Entity b]
-    , enemies ∷ [Entity c]
+    , _avatar  ∷ Entity a
+    , _items   ∷ [Entity b]
+    , _enemies ∷ [Entity c]
 
-    , map     ∷ TileMap d
+    , _map     ∷ TileMap d
 
-    , debugStatus ∷ String
+    , _debugStatus ∷ String
     }
+makeLenses ''Game
 
 
 update ∷ Event → Game (Character Char) Char c (Tile d) → Game (Character Char) Char c (Tile d)
-update (Move d)   og = (\g → setStatus (show . avatar $ g) g) $ moveAvatar d og
+update (Move d)   og = displayCharacterStatus $ moveAvatar d og
 update Attack     og = og
 update Open       og = og
 update Close      og = og
-update Get        og = (\g → setStatus (show . avatar $ g) g) $ pickUpItem (position (avatar og)) 'X' og
+update Get        og = displayCharacterStatus $ pickUpItem (og ^. avatar.position) 'X' og
 update Talk       og = og
 update Idle       og = og
-update Quit       og = og { running     = False }
+update Quit       og = running .~ False $ og
 
 
-setStatus ∷ String → Game a b c d → Game a b c d
-setStatus s g = g { debugStatus = s }
+displayCharacterStatus ∷ (Show a) ⇒ Game a b c d → Game a b c d
+displayCharacterStatus g = debugStatus .~ (views avatar show g) $ g
 
 
 -- Do change only the entity, not the game, like this:
 -- moveAvatar ∷ Direction → TileMap (Tile a) → Entity a → Entity a
 moveAvatar ∷ Direction → Game a b c (Tile d) → Game a b c (Tile d)
-moveAvatar d og = let op  = position . avatar $ og
+moveAvatar d og = let op  = og ^. avatar.position
                       np  = fmap (max 0) $ op + directionToVector d
                       nap = fromMaybe op $ do
-                                mapTile ← (mapData . map $ og) V.!? fromIntegral (coord2Linear np (width . map $ og))
+                                mapTile ← (og ^. map.mapData) V.!? fromIntegral (coord2Linear np (og ^. map.width))
                                 case mapTile of
                                     (Wall  _)   → pure op
                                     (Door  t _) → pure $ bool op np t
                                     _           → pure np
-                  in  og { avatar = Entity nap (object . avatar $ og) }
+                  in  avatar .~ Entity nap (og ^. avatar.object) $ og
 
 
 pickUpItem ∷ (Eq b) ⇒ V2 Int → b → Game (Character b) b c (Tile d) → Game (Character b) b c (Tile d)
 pickUpItem v rv og = fromMaybe og $ do
-    obj ← find ((==v) . position) (items og)
-    pure $ og { avatar = (avatar og) { object = addToInventory (object obj) (object (avatar og)) }
-              , items  = replaceObject obj rv (items og)
-              }
+    obj ← find ((==v) . view position) (og ^. items)
+    pure $ 
+        avatar.object %~ addToInventory (obj ^. object) $
+        items         %~ replaceObject obj rv $
+        og
     where
         replaceObject ∷ (Eq a) ⇒ Entity a → a → [Entity a] → [Entity a]
         replaceObject x rv = foldr (\lx nl → if x == lx
-                                               then lx { object = rv } : nl
+                                               then (object .~ rv $ lx) : nl
                                                else lx : nl) []
 
 
@@ -191,10 +198,10 @@ render g = do
     C.render
     where
         renderAction = do
-            drawMap (map g)
-            drawItems (items g)
-            drawCharacter (position . avatar $ g)
-            drawDebugStatus (debugStatus g)
+            drawMap (g ^. map)
+            drawItems (g ^. items)
+            drawCharacter (g ^. avatar.position)
+            drawDebugStatus (g ^. debugStatus)
 
 {-
 ColorBlack
@@ -229,10 +236,10 @@ AttributeVertical
 -}
 
 drawMap ∷ TileMap (Tile CursesDrawable) → C.Update ()
-drawMap m = mapM_ drawTile . zip [0..] . V.toList . mapData $ m
+drawMap m = mapM_ drawTile . zip [0..] . V.toList . view mapData $ m
     where
         drawTile (i, t) = do
-            let (V2 x y) = linear2Coord i (width m)
+            let (V2 x y) = linear2Coord i (m ^. width)
             C.moveCursor (fromIntegral y) (fromIntegral x) 
             C.drawGlyph (uncurry C.Glyph (drawableFromTile t))
 
@@ -277,7 +284,7 @@ main = C.runCurses $ do
             e ← nextEvent
             let ng = update e g
             render ng
-            when (running ng) $
+            when (ng ^. running) $
                 gameLoop ng
         preparePalette = pure Palette
                          <*> C.newColorID C.ColorBlack   C.ColorBlack 1
@@ -293,7 +300,7 @@ main = C.runCurses $ do
         createItemsFromMap m = 
             let getRocks ix t l =
                  if fst (drawableFromTile t) == '.'
-                   then Entity (fromIntegral <$> linear2Coord (fromIntegral ix) (width m)) '.' : l
+                   then Entity (fromIntegral <$> linear2Coord (fromIntegral ix) (m ^. width)) '.' : l
                    else l
-            in  V.ifoldr' getRocks [] . mapData $ m
+            in  V.ifoldr' getRocks [] . view mapData $ m
 

@@ -6,7 +6,6 @@ where
 
 import Control.Monad.Random (MonadRandom, getRandomR)
 import Data.Semigroup       ((<>))
-import Data.Bifunctor       (first)
 import Data.List            (findIndex)
 import Data.Foldable        (foldl')
 

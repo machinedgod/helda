@@ -1,9 +1,15 @@
 {-# LANGUAGE UnicodeSyntax #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module TileMap
 ( Width
 , Height
-, TileMap(..)
+, TileMap(TileMap)
+, name
+, width
+, height
+, mapData
+
 , loadFromFile
 
 , linear2Coord
@@ -11,7 +17,8 @@ module TileMap
 ) where
 
 
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Lens            (makeLenses)
+import Control.Monad.IO.Class  (MonadIO, liftIO)
 import Linear (V2(V2))
 
 import qualified Data.Vector as V (Vector, fromList)
@@ -24,11 +31,12 @@ type Height = Word
 --------------------------------------------------------------------------------
 
 data TileMap a = TileMap {
-      name    ∷ String
-    , width   ∷ Width
-    , height  ∷ Height
-    , mapData ∷ V.Vector a
+      _name    ∷ String
+    , _width   ∷ Width
+    , _height  ∷ Height
+    , _mapData ∷ V.Vector a
     }
+makeLenses ''TileMap
 
 
 loadFromFile ∷ (MonadIO m) ⇒ FilePath → (Char → a) → m (TileMap a)
