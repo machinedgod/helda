@@ -55,5 +55,5 @@ linear2Coord i w = let x = i `mod` w
 
 
 coord2Linear ∷ V2 Int → Width → Word
-coord2Linear (V2 x y) w = fromIntegral (max 0 (y * (fromIntegral w) + x))
+coord2Linear (V2 x y) w = fromIntegral (max 0 (y * fromIntegral w + x))
 

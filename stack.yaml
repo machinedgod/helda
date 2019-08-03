@@ -23,7 +23,7 @@ user-message: ! 'Warning (added by new or init): Specified resolver could not sa
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-11.5
+resolver: lts-13.29
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
