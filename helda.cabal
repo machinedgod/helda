@@ -30,6 +30,7 @@ executable helda
                        MonadRandom,
                        containers,
                        lens,
-                       mtl
+                       mtl,
+                       gl
   hs-source-dirs:      src
   default-language:    Haskell2010

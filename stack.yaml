@@ -23,7 +23,7 @@ user-message: ! 'Warning (added by new or init): Specified resolver could not sa
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-13.29
+resolver: lts-15.10
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -51,7 +51,10 @@ extra-deps:
 - ncurses-0.2.16
 
 # Override default flag values for local packages and extra-deps
-# flags: {}
+flags: 
+    ncurses:
+        use-pkgconfig: true
+        force-narrow-library: true
 
 # Extra package databases containing global packages
 # extra-package-dbs: []

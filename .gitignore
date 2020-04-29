@@ -6,3 +6,5 @@ dist/
 tags
 *.swp
 *.swo
+TODO
+stack.yaml.lock
