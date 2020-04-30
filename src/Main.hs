@@ -1,14 +1,16 @@
 {-# LANGUAGE UnicodeSyntax, DeriveFunctor, NegativeLiterals #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Main where
 
 
 import Prelude hiding (map)
 
-import Control.Lens           (makeLenses, (<>~), (%~), (.~), (^.), view, views,
-                               set)
+import Control.Lens           (makeLenses, (<>~), (%~), (.~), (^.), (%=),
+                               view, views)
 import Control.Monad          (when, void)
+import Control.Monad.State    (execState)
 import Control.Monad.IO.Class (liftIO)
 import Data.Bool              (bool)
 import Data.Maybe             (fromMaybe)
@@ -18,7 +20,7 @@ import Data.Foldable          (traverse_)
 
 import Linear                 (V2(V2))
 
-import qualified Data.Vector as V (toList, (!?), ifoldr')
+import qualified Data.Vector as V (toList, (!?), ifoldr', (//))
 import qualified UI.NCurses  as C
 
 import qualified MapGenerator as MG
@@ -33,7 +35,7 @@ data Palette = Palette {
     , green   ∷ C.ColorID
     , yellow  ∷ C.ColorID
     , blue    ∷ C.ColorID
-    , magenta ∷ C.ColorID    
+    , magenta ∷ C.ColorID
     , cyan    ∷ C.ColorID
     , white   ∷ C.ColorID
     }
@@ -130,7 +132,7 @@ makeLenses ''Entity
 data Game a b c d = Game {
       _running ∷ Bool
 
-    , _avatar  ∷ Entity a 
+    , _avatar  ∷ Entity a
     , _items   ∷ [Entity b]
     , _enemies ∷ [Entity c]
 
@@ -142,12 +144,12 @@ makeLenses ''Game
 
 
 -- TODO reeks of State monad (you're in the know, right?)
-update ∷ (Show b) ⇒ Event → Game (Character b) b c (Tile d) → Game (Character b) b c (Tile d)
+update ∷ (Eq b, Show b, b ~ d, b ~ CursesDrawable) ⇒ Event → Game (Character b) b c (Tile d) → Game (Character b) b c (Tile d)
 update (Move d)   og = displayCharacterStatus $ moveAvatar d og
 update Attack     og = og
 update Open       og = og
 update Close      og = og
-update Get        og = displayCharacterStatus $ pickUpItem (og ^. avatar.position) og
+update Get        og = displayCharacterStatus $ pickUpItem (og ^. avatar.position) (Grass (',', [])) og
 update Talk       og = og
 update Idle       og = og
 update Quit       og = running .~ False $ og
@@ -170,17 +172,14 @@ moveAvatar d og = let op  = og ^. avatar.position
                   in  avatar .~ Entity nap (og ^. avatar.object) $ og
 
 
-pickUpItem ∷ V2 Int → Game (Character b) b c d → Game (Character b) b c d
-pickUpItem v og = fromMaybe og $ do
+pickUpItem ∷ (Eq b, b ~ d) => V2 Int → Tile d → Game (Character b) b c (Tile d) → Game (Character b) b c (Tile d)
+pickUpItem v rv og = fromMaybe og $ do
     obj ← find ((==v) . view position) (og ^. items)
-    pure $ 
-        avatar.object %~ addToInventory (obj ^. object) $ og
-        --items         %~ replaceObject obj rv $
-    --where
-    --    replaceObject ∷ (Eq a) ⇒ Entity a → a → [Entity a] → [Entity a]
-    --    replaceObject x rv = foldr (\lx nl → if x == lx
-    --                                           then (object .~ rv $ lx) : nl
-    --                                           else lx : nl) []
+    pure $
+        flip execState og $ do
+            avatar.object %= addToInventory (obj ^. object)
+            items         %= delete obj
+            map.mapData   %= (V.// [(fromIntegral $ coord2Linear v (og ^. map.width), rv)])
 
 
 directionToVector ∷ Direction → V2 Int
@@ -210,33 +209,33 @@ render g = do
 {-
 ColorBlack
 
-ColorRed     
-ColorGreen   
-ColorYellow  
-ColorBlue    
-ColorMagenta     
-ColorCyan    
+ColorRed
+ColorGreen
+ColorYellow
+ColorBlue
+ColorMagenta
+ColorCyan
 ColorWhite
 -}
 
 {-
-AttributeColor ColorID  
-AttributeBold   
-AttributeDim    
+AttributeColor ColorID
+AttributeBold
+AttributeDim
 
-AttributeStandout   
-AttributeUnderline  
-AttributeReverse    
-AttributeBlink  
-AttributeAltCharset 
-AttributeInvisible  
-AttributeProtect    
-AttributeHorizontal 
-AttributeLeft   
-AttributeLow    
-AttributeRight  
-AttributeTop    
-AttributeVertical   
+AttributeStandout
+AttributeUnderline
+AttributeReverse
+AttributeBlink
+AttributeAltCharset
+AttributeInvisible
+AttributeProtect
+AttributeHorizontal
+AttributeLeft
+AttributeLow
+AttributeRight
+AttributeTop
+AttributeVertical
 -}
 
 drawMap ∷ TileMap (Tile CursesDrawable) → C.Update ()
@@ -244,24 +243,24 @@ drawMap m = mapM_ drawTile . zip [0..] . V.toList . view mapData $ m
     where
         drawTile (i, t) = do
             let (V2 x y) = linear2Coord i (m ^. width)
-            C.moveCursor (fromIntegral y) (fromIntegral x) 
+            C.moveCursor (fromIntegral y) (fromIntegral x)
             C.drawGlyph (uncurry C.Glyph (drawableFromTile t))
 
 
 drawItems ∷ [Entity CursesDrawable] → C.Update ()
-drawItems = traverse_ drawItem 
+drawItems = traverse_ drawItem
     where
         drawItem (Entity (V2 x y) cd) = do
-            C.moveCursor (fromIntegral y) (fromIntegral x) 
+            C.moveCursor (fromIntegral y) (fromIntegral x)
             C.drawGlyph (uncurry C.Glyph cd)
-            
+
 
 
 drawCharacter ∷ V2 Int → C.Update ()
 drawCharacter (V2 x y) =
     let pcGlyph = C.Glyph '@' [ C.AttributeBold ]
     in  do
-        C.moveCursor (fromIntegral y) (fromIntegral x) 
+        C.moveCursor (fromIntegral y) (fromIntegral x)
         C.drawGlyph pcGlyph
 
 
@@ -309,7 +308,7 @@ main = C.runCurses $ do
 
         -- TODO fix this, don't create entities here, but elsewhere?
         createItemsFromMap ∷ TileMap (Tile a) → [Entity a]
-        createItemsFromMap m = 
+        createItemsFromMap m =
             let createEntityFromTile ix =
                     Entity
                         (fromIntegral <$> linear2Coord (fromIntegral ix) (m ^. width))
