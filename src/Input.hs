@@ -21,7 +21,7 @@ data Direction = North
                | NorthEast
                | SouthWest
                | SouthEast
-               deriving (Show)
+               deriving (Eq, Ord, Show)
 
 
 data Event = Idle
