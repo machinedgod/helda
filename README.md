@@ -9,6 +9,7 @@ Clone, then run `stack install` and off you go.
 ### Basic game
 - Applicative instance and Monad instance for Entity and why are instances of
   common typeclasses important (reusable knowledge)
+- Tilemap layers (no replacing the tile after pickup)
 - either monad transformer stack or 'runThisEntity' function in the game API
 - Dyre for hotswapping
 - multiple screens to walk to

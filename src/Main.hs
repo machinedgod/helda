@@ -41,32 +41,8 @@ data Palette = Palette {
     , cyan    ∷ C.ColorID
     , white   ∷ C.ColorID
     }
-
-grassTiles ∷ [Char]
-grassTiles = [ ',', '"', '\'' ]
-
-
-rockTiles ∷ [Char]
-rockTiles = [ '.' ]
-
-
-flowerTiles ∷ [Char]
-flowerTiles = [ 'x', 'o' ]
-
-
 --uniformDistribution ∷ PDF Char
 --uniformDistribution = createPDF $ (1.0,) <$> (grassTiles <> rockTiles <> flowerTiles)
-
-
-testDistribution ∷ Palette → PDF Tile
-testDistribution p = createPDF $   (0.6, Grass 0) :|
-                                 [ (0.6, Grass 1)
-                                 , (0.6, Grass 2)
-                                 , (0.3, Rock  0)
-                                 , (0.15, Flower 0)
-                                 , (0.15, Flower 1)
-                                 ]
-
 
 -------------------------------------------------------------------------------
 
@@ -74,39 +50,89 @@ type Opened = Bool
 type CursesDrawable = (Char, [C.Attribute])
 
 
-data Tile
-    = Wall   Direction
-    | Door   Opened
-    | Grass  Int
-    | Rock   Int
-    | Flower Int
-    deriving (Eq, Ord, Show)
-
-
-drawableFromTile ∷ Palette → Tile → CursesDrawable
-drawableFromTile p (Wall North)     = ('═', [ C.AttributeColor (yellow p), C.AttributeDim ])
-drawableFromTile p (Wall NorthEast) = ('╗', [ C.AttributeColor (yellow p), C.AttributeDim ])
-drawableFromTile p (Wall East)      = ('║', [ C.AttributeColor (yellow p), C.AttributeDim ])
-drawableFromTile p (Wall SouthEast) = ('╝', [ C.AttributeColor (yellow p), C.AttributeDim ])
-drawableFromTile p (Wall South)     = ('═', [ C.AttributeColor (yellow p), C.AttributeDim ])
-drawableFromTile p (Wall SouthWest) = ('╚', [ C.AttributeColor (yellow p), C.AttributeDim ])
-drawableFromTile p (Wall West)      = ('║', [ C.AttributeColor (yellow p), C.AttributeDim ])
-drawableFromTile p (Wall NorthWest) = ('╔', [ C.AttributeColor (yellow p), C.AttributeDim ])
-drawableFromTile p (Door True)      = ('/', [ C.AttributeColor (yellow p), C.AttributeDim ])
-drawableFromTile p (Door False)     = ('+', [ C.AttributeColor (yellow p), C.AttributeDim ])
-drawableFromTile p (Grass ix@0)     = (grassTiles !! ix, [ C.AttributeColor (green p), C.AttributeDim ])
-drawableFromTile p (Grass ix@1)     = (grassTiles !! ix, [ C.AttributeColor (green p), C.AttributeDim ])
-drawableFromTile p (Grass ix@2)     = (grassTiles !! ix, [ C.AttributeColor (green p) ])
-drawableFromTile p (Rock ix@0)      = (rockTiles !! ix, [ C.AttributeColor (white p), C.AttributeDim ])
-drawableFromTile p (Flower ix@0)    = (flowerTiles !! ix, [ C.AttributeColor (red p), C.AttributeDim ])
-drawableFromTile p (Flower ix@1)    = (flowerTiles !! ix, [ C.AttributeColor (blue p), C.AttributeDim ])
-drawableFromTile _ _                = error "Tile with invalid setup!"
+class DrawableTile a where
+    tileCharacter  ∷ a → Char
+    tileAttributes ∷ Palette → a → [C.Attribute]
 
 -------------------------------------------------------------------------------
 
-data Character a = Character {
+data GrassTile
+    = Comma
+    | Quote
+    | SQuote
+    deriving (Eq, Ord, Show)
+
+instance DrawableTile GrassTile where
+    tileCharacter Comma  = ','
+    tileCharacter Quote  = '"'
+    tileCharacter SQuote = '\''
+
+    tileAttributes p _  = [ C.AttributeColor (green p), C.AttributeDim ]
+
+
+
+data RockTile
+    = Fullstop
+    deriving (Eq, Ord, Show)
+
+instance DrawableTile RockTile where
+    tileCharacter Fullstop = '.'
+    tileAttributes p Fullstop = [ C.AttributeColor (white p), C.AttributeDim ]
+
+
+data FlowerTile
+    = RedFlower
+    | BlueFlower
+    | YellowFlower
+    | MagentaFlower
+    deriving (Eq, Ord, Show)
+
+instance DrawableTile FlowerTile where
+    tileCharacter RedFlower     = 'x'
+    tileCharacter BlueFlower    = 'o'
+    tileCharacter YellowFlower  = 'y'
+    tileCharacter MagentaFlower = '*'
+
+    tileAttributes p RedFlower     = [ C.AttributeColor (red p), C.AttributeDim ]
+    tileAttributes p BlueFlower    = [ C.AttributeColor (blue p), C.AttributeDim ]
+    tileAttributes p YellowFlower  = [ C.AttributeColor (yellow p), C.AttributeDim ]
+    tileAttributes p MagentaFlower = [ C.AttributeColor (magenta p), C.AttributeDim ]
+
+
+data Tile
+    = Wall   Direction
+    | Door   Opened
+    | Grass  GrassTile
+    | Rock   RockTile
+    | Flower FlowerTile
+    deriving (Eq, Ord, Show)
+
+instance DrawableTile Tile where
+    tileCharacter (Wall d) = case d of
+        North     → '═'
+        NorthEast → '╗'
+        East      → '║'
+        SouthEast → '╝'
+        South     → '═'
+        SouthWest → '╚'
+        West      → '║'
+        NorthWest → '╔'
+    tileCharacter (Door o)    = bool '+'  '/' o
+    tileCharacter (Grass gt)  = tileCharacter gt
+    tileCharacter (Rock rt)   = tileCharacter rt
+    tileCharacter (Flower ft) = tileCharacter ft
+
+    tileAttributes p (Wall _)    = [ C.AttributeColor (yellow p), C.AttributeDim ]
+    tileAttributes p (Door _)    = [ C.AttributeColor (yellow p), C.AttributeDim ]
+    tileAttributes p (Grass gt)  = tileAttributes p gt
+    tileAttributes p (Rock rt)   = tileAttributes p rt
+    tileAttributes p (Flower ft) = tileAttributes p ft
+
+-------------------------------------------------------------------------------
+
+data Character i = Character {
       _charName  ∷ String
-    , _inventory ∷ [a]
+    , _inventory ∷ [i]
     }
     deriving (Show)
 makeLenses ''Character
@@ -131,14 +157,14 @@ makeLenses ''Entity
 
 --------------------------------------------------------------------------------
 
-data Game a b c d = Game {
+data Game a i e t = Game {
       _running ∷ Bool
 
     , _avatar  ∷ Entity a
-    , _items   ∷ [Entity b]
-    , _enemies ∷ [Entity c]
+    , _items   ∷ [Entity i]
+    , _enemies ∷ [Entity e]
 
-    , _map     ∷ TileMap d
+    , _map     ∷ TileMap t
 
     , _debugStatus ∷ String
     }
@@ -147,13 +173,13 @@ makeLenses ''Game
 
 -- TODO reeks of State monad (you're in the know, right?)
 update ∷ Event
-       → Game (Character CursesDrawable) CursesDrawable c Tile
-       → Game (Character CursesDrawable) CursesDrawable c Tile
+       → Game (Character Tile) Tile e Tile
+       → Game (Character Tile) Tile e Tile
 update (Move d)   og = displayCharacterStatus $ moveAvatar d og
 update Attack     og = og
 update Open       og = og
 update Close      og = og
-update Get        og = displayCharacterStatus $ pickUpItem (og ^. avatar.position) (Grass 0) og
+update Get        og = displayCharacterStatus $ pickUpItem (og ^. avatar.position) (Grass Comma) og
 update Talk       og = og
 update Idle       og = og
 update Quit       og = running .~ False $ og
@@ -170,9 +196,9 @@ moveAvatar d og = let op  = og ^. avatar.position
                       nap = fromMaybe op $ do
                                 mapTile ← (og ^. map.mapData) V.!? fromIntegral (coord2Linear np (og ^. map.width))
                                 case mapTile of
-                                    (Wall d)  → pure op
-                                    (Door  t) → pure $ bool op np t
-                                    _         → pure np
+                                    (Wall _) → pure op
+                                    (Door t) → pure $ bool op np t
+                                    _        → pure np
                   in  avatar .~ Entity nap (og ^. avatar.object) $ og
 
 
@@ -198,7 +224,7 @@ directionToVector SouthEast = V2  1  1
 
 --------------------------------------------------------------------------------
 
-render ∷ Palette → Game a CursesDrawable c Tile → C.Curses ()
+render ∷ (DrawableTile i) ⇒ Palette → Game a i e Tile → C.Curses ()
 render p g = do
     w ← C.defaultWindow
     C.updateWindow w renderAction
@@ -206,7 +232,7 @@ render p g = do
     where
         renderAction = do
             drawMap p (g ^. map)
-            drawItems (g ^. items)
+            drawItems p (g ^. items)
             drawCharacter (g ^. avatar.position)
             drawDebugStatus (g ^. debugStatus)
 
@@ -242,22 +268,22 @@ AttributeTop
 AttributeVertical
 -}
 
-drawMap ∷ Palette → TileMap Tile → C.Update ()
+drawMap ∷ (DrawableTile a) ⇒ Palette → TileMap a → C.Update ()
 drawMap p m = mapM_ drawTile . zip [0..] . V.toList . view mapData $ m
     where
-        drawTile ∷ (Int, Tile) → C.Update ()
+        drawTile ∷ (DrawableTile a) ⇒ (Int, a) → C.Update ()
         drawTile (i, t) = do
             let (V2 x y) = linear2Coord (fromIntegral i) (m ^. width)
             C.moveCursor (fromIntegral y) (fromIntegral x)
-            C.drawGlyph (uncurry C.Glyph (drawableFromTile p t))
+            C.drawGlyph (C.Glyph (tileCharacter t) (tileAttributes p t))
 
 
-drawItems ∷ [Entity CursesDrawable] → C.Update ()
-drawItems = traverse_ drawItem
+drawItems ∷ (DrawableTile i) ⇒ Palette → [Entity i] → C.Update ()
+drawItems p = traverse_ drawItem
     where
-        drawItem (Entity (V2 x y) cd) = do
+        drawItem (Entity (V2 x y) t) = do
             C.moveCursor (fromIntegral y) (fromIntegral x)
-            C.drawGlyph (uncurry C.Glyph cd)
+            C.drawGlyph (C.Glyph (tileCharacter t) (tileAttributes p t))
 
 
 
@@ -276,22 +302,35 @@ drawDebugStatus s = do
 
 --------------------------------------------------------------------------------
 
+testDistribution ∷ PDF Tile
+testDistribution = createPDF $   (0.6, Grass Comma) :|
+                               [ (0.6, Grass Quote)
+                               , (0.6, Grass SQuote)
+                               , (0.3, Rock  Fullstop)
+                               , (0.10, Flower RedFlower)
+                               , (0.15, Flower BlueFlower)
+                               , (0.08, Flower YellowFlower)
+                               , (0.03, Flower MagentaFlower)
+                               ]
+
+
 main ∷ IO ()
 main = C.runCurses $ do
     void $ C.setCursorMode C.CursorInvisible
     C.setEcho False
     (r, c) ← bimap fromIntegral (fromIntegral . (1`subtract`)) <$> C.screenSize
     p ← preparePalette
-    m ← liftIO (MG.generate c r (Grass 0)  (testDistribution p))
+    m ← liftIO (MG.generate c r testDistribution)
 
-    gameLoop p (initialGame p m)
+    gameLoop p (initialGame m)
     where
-        initialChar   = Entity (V2 0 0) $ Character "John" []
+        initialChar ∷ Entity (Character Tile)
+        initialChar = Entity (V2 0 0) $ Character "John" []
 
-        initialGame ∷ Palette → TileMap Tile → Game (Character CursesDrawable) CursesDrawable CursesDrawable Tile
-        initialGame p m = Game True initialChar (createItemsFromMap p m) [] m ""
+        initialGame ∷ TileMap Tile → Game (Character Tile) Tile Tile Tile
+        initialGame m = Game True initialChar (createItemsFromMap m) [] m ""
 
-        gameLoop ∷ Palette → Game (Character CursesDrawable) CursesDrawable CursesDrawable Tile → C.Curses ()
+        gameLoop ∷ Palette → Game (Character Tile) Tile Tile Tile → C.Curses ()
         gameLoop p g = do
             e ← nextEvent
             let ng = update e g
@@ -310,11 +349,9 @@ main = C.runCurses $ do
                          <*> C.newColorID C.ColorWhite   C.ColorBlack 8
 
         -- TODO fix this, don't create entities here, but elsewhere?
-        createItemsFromMap ∷ Palette → TileMap Tile → [Entity CursesDrawable]
-        createItemsFromMap p m =
-            let createEntityFromTile ix =
-                    Entity
-                        (fromIntegral <$> linear2Coord (fromIntegral ix) (m ^. width))
-                getAllEntities ix t l = createEntityFromTile ix (drawableFromTile p t) : l
+        createItemsFromMap ∷ TileMap Tile → [Entity Tile]
+        createItemsFromMap m =
+            let entityPositionFromIx ix = fromIntegral <$> linear2Coord (fromIntegral ix) (m ^. width)
+                getAllEntities ix t l = Entity (entityPositionFromIx ix) t : l
             in  V.ifoldr' getAllEntities [] . view mapData $ m
 
