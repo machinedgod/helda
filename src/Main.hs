@@ -1,23 +1,27 @@
-{-# LANGUAGE UnicodeSyntax, DeriveFunctor, NegativeLiterals #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveFunctor    #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NegativeLiterals #-}
+{-# LANGUAGE TemplateHaskell  #-}
+{-# LANGUAGE TypeFamilies     #-}
+{-# LANGUAGE UnicodeSyntax    #-}
+{-# LANGUAGE LambdaCase       #-}
 
 module Main where
 
 
 import Prelude hiding (map)
 
-import Control.Lens           (makeLenses, (<>~), (%~), (.~), (^.), (%=),
-                               view, views)
-import Control.Monad          (when, void)
-import Control.Monad.State    (execState)
+import Control.Lens           (makeLenses, (<>=), (.=), (^.), (%=),
+                               view, use, uses)
 import Control.Monad.IO.Class (liftIO)
-import Data.Bool              (bool)
-import Data.Maybe             (fromMaybe)
+import Control.Monad.State    (MonadState, execState)
+import Control.Monad          (when, void)
 import Data.Bifunctor         (bimap)
+import Data.Bool              (bool)
+import Data.Foldable          (traverse_)
 import Data.List              (delete, find)
 import Data.List.NonEmpty     (NonEmpty((:|)))
-import Data.Foldable          (traverse_)
+import Data.Maybe             (fromMaybe)
 
 import Linear                 (V2(V2))
 
@@ -41,8 +45,6 @@ data Palette = Palette {
     , cyan    ∷ C.ColorID
     , white   ∷ C.ColorID
     }
---uniformDistribution ∷ PDF Char
---uniformDistribution = createPDF $ (1.0,) <$> (grassTiles <> rockTiles <> flowerTiles)
 
 -------------------------------------------------------------------------------
 
@@ -138,13 +140,12 @@ data Character i = Character {
 makeLenses ''Character
 
 
--- TODO Reeks of state monad
-addToInventory ∷ a → Character a → Character a
-addToInventory i = inventory <>~ [i]
+addToInventory ∷ (MonadState (Character a) ms) ⇒ a → ms ()
+addToInventory i = inventory <>= [i]
 
 
-removeFromInventory ∷ (Eq a) ⇒ a → Character a → Character a
-removeFromInventory i = inventory %~ delete i
+removeFromInventory ∷ (Eq a, MonadState (Character a) ms) ⇒ a → ms ()
+removeFromInventory i = inventory %= delete i
 
 -------------------------------------------------------------------------------
 
@@ -171,45 +172,52 @@ data Game a i e t = Game {
 makeLenses ''Game
 
 
--- TODO reeks of State monad (you're in the know, right?)
-update ∷ Event
-       → Game (Character Tile) Tile e Tile
-       → Game (Character Tile) Tile e Tile
-update (Move d)   og = displayCharacterStatus $ moveAvatar d og
-update Attack     og = og
-update Open       og = og
-update Close      og = og
-update Get        og = displayCharacterStatus $ pickUpItem (og ^. avatar.position) (Grass Comma) og
-update Talk       og = og
-update Idle       og = og
-update Quit       og = running .~ False $ og
+update ∷ (MonadState (Game (Character Tile) Tile e Tile) ms) ⇒ Event → ms ()
+update (Move d) = moveAvatar d *> displayCharacterStatus
+update Attack   = pure ()
+update Open     = pure ()
+update Close    = pure ()
+update Get      = do
+    p ← use (avatar.position)
+    pickUpItem p (Grass Comma)
+    displayCharacterStatus
+update Talk     = pure ()
+update Idle     = pure ()
+update Quit     = running .= False
 
 
-displayCharacterStatus ∷ (Show a) ⇒ Game a b c d → Game a b c d
-displayCharacterStatus g = debugStatus .~ views avatar show g $ g
+displayCharacterStatus ∷ (Show a, MonadState (Game a i e Tile) ms) ⇒ ms ()
+displayCharacterStatus = uses avatar show >>= (debugStatus .=)
 
 
 -- Do change only the entity, not the game, like this:
-moveAvatar ∷ Direction → Game a b c Tile → Game a b c Tile
-moveAvatar d og = let op  = og ^. avatar.position
-                      np  = fmap (max 0) $ op + directionToVector d
-                      nap = fromMaybe op $ do
-                                mapTile ← (og ^. map.mapData) V.!? fromIntegral (coord2Linear np (og ^. map.width))
-                                case mapTile of
-                                    (Wall _) → pure op
-                                    (Door t) → pure $ bool op np t
-                                    _        → pure np
-                  in  avatar .~ Entity nap (og ^. avatar.object) $ og
+moveAvatar ∷ (MonadState (Game a i e Tile) ms) ⇒ Direction → ms ()
+moveAvatar d = do
+    op ← use (avatar.position)
+    ao ← use (avatar.object)
+
+    md ← use (map.mapData)
+    mw ← use (map.width)
+
+    let np  = fmap (max 0) $ op + directionToVector d
+        nap = fromMaybe op $ do
+                     mapTile ← md V.!? fromIntegral (coord2Linear np mw)
+                     case mapTile of
+                         (Wall _) → pure op
+                         (Door t) → pure $ bool op np t
+                         _        → pure np
+    avatar .= Entity nap ao
 
 
-pickUpItem ∷ (Eq b, b ~ d) => V2 Int → Tile → Game (Character b) b c Tile → Game (Character b) b c Tile
-pickUpItem v rv og = fromMaybe og $ do
-    obj ← find ((==v) . view position) (og ^. items)
-    pure $
-        flip execState og $ do
-            avatar.object %= addToInventory (obj ^. object)
+pickUpItem ∷ (Eq i, MonadState (Game (Character i) i e Tile) ms) => V2 Int → Tile → ms ()
+pickUpItem v rv = do
+    mw ← use (map.width)
+    uses items (find ((==v) . view position)) >>= \case
+        Nothing  → pure ()
+        Just obj → do
+            avatar.object %= execState (addToInventory (obj ^. object))
             items         %= delete obj
-            map.mapData   %= (V.// [(fromIntegral $ coord2Linear v (og ^. map.width), rv)])
+            map.mapData   %= (V.// [(fromIntegral $ coord2Linear v mw, rv)])
 
 
 directionToVector ∷ Direction → V2 Int
@@ -333,7 +341,7 @@ main = C.runCurses $ do
         gameLoop ∷ Palette → Game (Character Tile) Tile Tile Tile → C.Curses ()
         gameLoop p g = do
             e ← nextEvent
-            let ng = update e g
+            let ng = execState (update e) g
             render p ng
             when (ng ^. running) $
                 gameLoop p ng
